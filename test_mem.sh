@@ -1,7 +1,7 @@
 #!/bin/bash
 
-LOG_FILE="/var/log/syslog"  # Specify the log file you want to parse
-INPUT_DATE=$1  # Replace with dynamic date if needed
+LOG_FILE="/var/log/syslog"  
+INPUT_DATE=$1  
 START_TIME=$2
 END_TIME=$3
 
@@ -11,22 +11,22 @@ if [[ ! -f "$LOG_FILE" ]]; then
     exit 1
 fi
 
-# Initialize counters and associative arrays
+
 declare -A SEVERE_ERROR_COUNT
 declare -A MILD_ERROR_COUNT
 declare -A WARNING_COUNT
 SUCCESS_COUNT=0
 
-# Associative arrays to store specific errors
+
 declare -A OUT_OF_MEMORY_ERRORS
 declare -A OOM_ERRORS
 declare -A SEGFAULT_ERRORS
 declare -A MALLOC_ERRORS
 
-# Function to categorize message as error (severe/mild), warning, or success
+
 categorize_message() {
     local message="$1"
-    local category="success"  # Default category if not error or warning
+    local category="success"  
 
     # Check for severe and mild error keywords
     if [[ $message =~ (kernel\ bug|OOM|out\ of\ memory|critical|disk\ failure|I/O\ error) ]]; then
@@ -57,16 +57,16 @@ track_specific_errors() {
     fi
 }
 
-# Function to parse the log file and extract app name and categorize the message
+
 parse_log() {
     local log_file="$LOG_FILE"
     local date_format
     local sample_line
 
-    # Read the first line to determine its date format
+    #  determine its date format
     read -r sample_line < "$log_file"
 
-    # Determine the date format of the sample line
+ 
     if [[ $sample_line =~ ^[A-Za-z]{3}[[:space:]]+[0-9]{1,2} ]]; then
         date_format=2  
     elif [[ $sample_line =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2} ]]; then
@@ -76,7 +76,7 @@ parse_log() {
         return 1
     fi
 
-    # Parse the log file
+ 
     while IFS= read -r line; do
         local app_name=""
         local message=""
@@ -84,16 +84,16 @@ parse_log() {
         if [[ $date_format -eq 1 ]]; then  # yyyy-mm-dd format
             if [[ $line =~ ([0-9]{4})-([0-9]{2})-([0-9]{2}) ]]; then
                 log_date="${BASH_REMATCH[0]}"
-
+                     
                 if [[ "$log_date" == "$INPUT_DATE" ]]; then
                     timestamp=$(echo "$line" | awk -F'T' '{print $2}' | cut -d '.' -f 1)
 
                     # Check if timestamp is within the specified range
-                    if [[ "$timestamp" > "$START_TIME" || "$timestamp" == "$START_TIME" ]] && [[ "$timestamp" < "$END_TIME" || "$timestamp" == "$END_TIME" ]]; then
-                        app_name=$(echo "$line" | awk -F '[[:space:]]|\\[' '{print $3}')  # Extract app name without PID
-                        message=$(echo "$line" | awk -F ']: ' '{gsub(/^ +| +$/, "", $2); print $2}')  # Extract message and trim spaces
-                        #echo "Extracted message: '$message'"  # Debugging statement
-                    fi
+                if [[ "$timestamp" > "$START_TIME" || "$timestamp" == "$START_TIME" ]] && [[ "$timestamp" < "$END_TIME" || "$timestamp" == "$END_TIME" ]]; then
+                    app_name=$(echo "$line" | awk -F '[[:space:]]|\\[' '{print $3}')  
+                    message=$(echo "$line" | awk -F ']: ' '{gsub(/^ +| +$/, "", $2); print $2}')  
+                    
+                fi
                 fi
             fi
         elif [[ $date_format -eq 2 ]]; then  # mmm dd format
@@ -103,29 +103,29 @@ parse_log() {
 
                 if [[ "$log_date" == "$date_mmm_dd" ]]; then
                     app_name=$(echo "$line" | awk '{print $5}' | cut -d '[' -f 1)
-                    message=$(echo "$line" | cut -d ':' -f 3- | sed -e "s/^ *//" -e "s/ *$//")  # Trim whitespaces
+                    message=$(echo "$line" | cut -d ':' -f 3- | sed -e "s/^ *//" -e "s/ *$//")  
 
-                    # Clean up app name
-                    app_name="${app_name%:}"        # Remove trailing colon if exists
+            
+                    app_name="${app_name%:}"        
                     app_name="${app_name%[]}"
-                    app_name="${app_name%]}"       # Remove trailing bracket if exists
-                   # echo "Extracted message: '$message'"  # Debugging statement
+                    app_name="${app_name%]}"       
+             
                 fi
             fi
         fi
 
-        # Check if message is not empty
-        if [[ -n "$message" ]]; then
-            # Categorize the message
-            local category
       
+        if [[ -n "$message" ]]; then
+           
+            local category
+                  
             category=$(categorize_message "$message")
-           # Debugging statement
-
-            # Track specific errors (out of memory, oom, segfault, malloc)
+          
+          
+       
             track_specific_errors "$app_name" "$message"
 
-            # Increment counts based on the category, initialize if not already
+        
             case $category in
                 "severe_error")
                     SEVERE_ERROR_COUNT["$app_name"]=$((SEVERE_ERROR_COUNT["$app_name"] + 1))
@@ -146,7 +146,7 @@ parse_log() {
 }
 
 
-# Function to print specific error table
+
 print_specific_error_table() {
     printf "\n\e[34mError Table:\e[0m\n"
     printf "%-20s %-15s %-10s %-30s\n" "Error" "App Name" "Count" "Error Message"
@@ -171,7 +171,7 @@ print_specific_error_table() {
         printf "%-20s %-15s %-10d %-30s\n" "malloc" "$app" "${MALLOC_ERRORS[$app]}" "malloc"
     done
 
-    # Show 0 for errors that were not found
+
     if [[ ${#OUT_OF_MEMORY_ERRORS[@]} -eq 0 ]]; then
         printf "%-20s %-15s %-10d %-30s\n" "out of memory" "N/A" "0" "out of memory"
     fi
@@ -186,11 +186,10 @@ print_specific_error_table() {
     fi
 }
 
-# Function to print the summary of errors and warnings
 print_summary() {
     printf "\n\e[34mSummary of Errors and Warnings:\e[0m\n"
 
-    # Print severe errors
+    #  severe errors
     if [[ ${#SEVERE_ERROR_COUNT[@]} -gt 0 ]]; then
         printf "\e[31msevere errors:\e[0m\n"
         for app in "${!SEVERE_ERROR_COUNT[@]}"; do
@@ -198,7 +197,7 @@ print_summary() {
         done
     fi
 
-    # Print mild errors
+    #  mild errors
     if [[ ${#MILD_ERROR_COUNT[@]} -gt 0 ]]; then
         printf "\e[91mmild errors:\e[0m\n"
         for app in "${!MILD_ERROR_COUNT[@]}"; do
@@ -206,7 +205,7 @@ print_summary() {
         done
     fi
 
-    # Print warnings
+    #  warnings
     if [[ ${#WARNING_COUNT[@]} -gt 0 ]]; then
         printf "\e[33mwarning:\e[0m\n"
         for app in "${!WARNING_COUNT[@]}"; do
@@ -214,7 +213,7 @@ print_summary() {
         done
     fi
 
-    # Print success count
+    #  success count
     printf "\e[32msuccess count:\e[0m %d\n" "$SUCCESS_COUNT"
 
     printf "\e[32mtotal:\e[0m\n%d\n" "$SUCCESS_COUNT"
@@ -234,86 +233,82 @@ print_summary() {
         total_warnings=$((total_warnings + count))
     done
 
-    # Find the maximum value among the counts
+ 
     max_value=$(echo "$total_severe_errors" "$total_mild_errors" "$total_warnings" "$SUCCESS_COUNT" | awk '{print ($1>$2 && $1>$3 && $1>$4)?$1:($2>$3 && $2>$4)?$2:($3>$4)?$3:$4}')
     
-    # Normalize the counts
+
     normalized_severe_errors=$(echo "scale=2; ($total_severe_errors / $max_value) * 120 + 1" | bc)
     normalized_mild_errors=$(echo "scale=2; ($total_mild_errors / $max_value) * 120" | bc)
     normalized_warnings=$(echo "scale=2; ($total_warnings / $max_value) * 120" | bc)
     normalized_success=$(echo "scale=2; ($SUCCESS_COUNT / $max_value) * 120" | bc)
 
-    # Print horizontal graph
-    printf "\nGraph:\n"
+ printf "\nGraph:\n"
 
-    # Total severe errors
-    printf "Severe Errors:  "
-    for ((i=0; i<${normalized_severe_errors%.*}; i++)); do
-        printf "\e[31m▅\e[0m"
-    done
-    printf "$total_sever_errors"
-    printf "\n"
+printf "Severe Errors:  "
+for ((i=0; i<${normalized_severe_errors%.*}; i++)); do
+    printf "\e[31m▅\e[0m"
+done
+printf "$total_sever_errors"
+printf "\n"
 
-    # Total mild errors
-    printf "Mild Errors:    "
-    for ((i=0; i<${normalized_mild_errors%.*}; i++)); do
-        printf "\e[91m▅\e[0m"
-    done
-    printf "$total_mild_errors"
-    printf "\n"
+printf "Mild Errors:    "
+for ((i=0; i<${normalized_mild_errors%.*}; i++)); do
+    printf "\e[91m▅\e[0m"
+done
+printf "$total_mild_errors"
+printf "\n"
 
-    # Total warnings
-    printf "Warnings:       "
-    for ((i=0; i<${normalized_warnings%.*}; i++)); do
-        printf "\e[33m▅\e[0m"
-    done
-    printf "$total_warnings"
-    printf "\n"
+printf "Warnings:       "
+for ((i=0; i<${normalized_warnings%.*}; i++)); do
+    printf "\e[33m▅\e[0m"
+done
+printf "$total_warnings"
+printf "\n"
 
-    # Success count
-    printf "Total :         "
-    for ((i=0; i<${normalized_success%.*}; i++)); do
-        printf "\e[32m▅\e[0m"
-    done
-    printf "$SUCCESS_COUNT"
-    printf "\n"
-    # Print the specific error table
-    print_specific_error_table
-    printf "\n"
-    memory_used=$(free -h | grep Mem | awk '{print $3}' | sed 's/G/ /' | awk '{print $1*1024}')
-    memory_total=$(free -h | grep Mem | awk '{print $2}' | sed 's/G/ /' | awk '{print $1*1024}')
-    memory_percentage=$(echo "scale=2; $memory_used * 100 / $memory_total" | bc)
+printf "Total :         "
+for ((i=0; i<${normalized_success%.*}; i++)); do
+    printf "\e[32m▅\e[0m"
+done
+printf "$SUCCESS_COUNT"
+printf "\n"
 
-    if (( $(echo "$memory_percentage > 75" | bc -l) )); then
-        echo -e "\e[31mMemory Usage: Used: ${memory_used}MB / Total: ${memory_total}MB (High)\e[0m"
-    elif (( $(echo "$memory_percentage > 50" | bc -l) )); then
-        echo -e "\e[33mMemory Usage: Used: ${memory_used}MB / Total: ${memory_total}MB (Moderate)\e[0m"
+print_specific_error_table
+printf "\n"
+
+memory_used=$(free -h | grep Mem | awk '{print $3}' | sed 's/G/ /' | awk '{print $1*1024}')
+memory_total=$(free -h | grep Mem | awk '{print $2}' | sed 's/G/ /' | awk '{print $1*1024}')
+memory_percentage=$(echo "scale=2; $memory_used * 100 / $memory_total" | bc)
+
+if (( $(echo "$memory_percentage > 75" | bc -l) )); then
+    echo -e "\e[31mMemory Usage: Used: ${memory_used}MB / Total: ${memory_total}MB (High)\e[0m"
+elif (( $(echo "$memory_percentage > 50" | bc -l) )); then
+    echo -e "\e[33mMemory Usage: Used: ${memory_used}MB / Total: ${memory_total}MB (Moderate)\e[0m"
+else
+    echo -e "\e[32mMemory Usage: Used: ${memory_used}MB / Total: ${memory_total}MB (Normal)\e[0m"
+fi
+
+disk_usage=$(df -h --output=pcent | grep -Eo '[0-9]+' | head -n 1)
+if [[ -n "$disk_usage" && "$disk_usage" =~ ^[0-9]+$ ]]; then
+    if (( disk_usage > 80 )); then
+        echo -e "\e[31mDisk Usage: ${disk_usage}% (High)\e[0m"
     else
-        echo -e "\e[32mMemory Usage: Used: ${memory_used}MB / Total: ${memory_total}MB (Normal)\e[0m"
+        echo -e "\e[32mDisk Usage: ${disk_usage}% (Normal)\e[0m"
     fi
+else
+    echo "Could not retrieve disk usage."
+fi
 
-    disk_usage=$(df -h --output=pcent | grep -Eo '[0-9]+' | head -n 1)  # Extract the first percentage value
-    if [[ -n "$disk_usage" && "$disk_usage" =~ ^[0-9]+$ ]]; then  # Check if the disk_usage is a non-empty number
-        if (( disk_usage > 80 )); then
-            echo -e "\e[31mDisk Usage: ${disk_usage}% (High)\e[0m"
-        else
-            echo -e "\e[32mDisk Usage: ${disk_usage}% (Normal)\e[0m"
-        fi
-    else
-        echo "Could not retrieve disk usage."
-    fi
-    swap_usage=$(free -h | grep Swap | awk '{print $3}' | sed 's/G/ /' | awk '{print $1*1024}')
-    swap_total=$(free -h | grep Swap | awk '{print $2}' | sed 's/G/ /' | awk '{print $1*1024}')
-    swap_percentage=$(echo "scale=2; $swap_usage * 100 / $swap_total" | bc)
+swap_usage=$(free -h | grep Swap | awk '{print $3}' | sed 's/G/ /' | awk '{print $1*1024}')
+swap_total=$(free -h | grep Swap | awk '{print $2}' | sed 's/G/ /' | awk '{print $1*1024}')
+swap_percentage=$(echo "scale=2; $swap_usage * 100 / $swap_total" | bc)
 
-    if (( $(echo "$swap_percentage > 75" | bc -l) )); then
-        echo -e "\e[31mSwap Usage: Used: ${swap_usage}MB / Total: ${swap_total}MB (High)\e[0m"
-    else
-        echo -e "\e[32mSwap Usage: Used: ${swap_usage}MB / Total: ${swap_total}MB (Normal)\e[0m"
-    fi
+if (( $(echo "$swap_percentage > 75" | bc -l) )); then
+    echo -e "\e[31mSwap Usage: Used: ${swap_usage}MB / Total: ${swap_total}MB (High)\e[0m"
+else
+    echo -e "\e[32mSwap Usage: Used: ${swap_usage}MB / Total: ${swap_total}MB (Normal)\e[0m"
+fi
 
 }
-
 
 main() {
     if [[ -f $LOG_FILE ]]; then
@@ -322,7 +317,7 @@ main() {
 
         printf "\n"
         printf "Memory and paging details for interval\n"
-       sar -r -B -W -s "$START_TIME" -e "$END_TIME" -i 1800 --human --pretty
+        sar -r -B -W -s "$START_TIME" -e "$END_TIME" -i 1800 --human --pretty
 
     else
         printf "Error: Log file %s not found\n" "$LOG_FILE" >&2

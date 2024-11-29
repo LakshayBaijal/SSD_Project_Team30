@@ -1,10 +1,9 @@
 #!/bin/bash
 
-LOG_FILE="/var/log/auth.log"  # Specify the log file you want to parse
-INPUT_DATE=$1  # Replace with dynamic date if needed
+LOG_FILE="/var/log/auth.log"  
+INPUT_DATE=$1  
 START_TIME=$2
 END_TIME=$3
-
 
 
 declare -A AUTH_FAILUER_DATE
@@ -12,92 +11,105 @@ declare -A SUDO_PRIVILEGES_DATA
 declare -A SESSION_APPLICATIONS
 declare -A OTHER_EVENTS
 
+AUTH_FAILUER_OUTPUT=()
+SUDO_PRIVILEGES_OUTPUT=()
 categorize_message() {
     local message="$1"
     local log_date="$2"
     local timestamp="$3"
     local app_name="$4"
 
-
+    #echo "Processing message: $message"  # Debugging line
 
     if [[ "$message" =~ "authentication failure" ]]; then
-        # Authentication Failure
         logname=$(echo "$message" | grep -oP "logname=\K[^ ]+")
         user=$(echo "$message" | grep -oP "user=\K[^ ]+")
-        AUTH_FAILUER_DATE+=("$log_date $timestamp\t\t$logname\t\t$user")
+
+        if [[ -z "$logname" ]]; then
+            logname="N/A"
+        fi
+
+       
+
+        AUTH_FAILUER_OUTPUT+=("$timestamp $logname $user")
     elif [[ "$message" =~ "COMMAND=" ]]; then
-        # Sudo Privileges
+      
+         # Sudo Privileges
         pwd=$(echo "$message" | grep -oP "PWD=\K[^ ]+")
         command=$(echo "$message" | grep -oP "COMMAND=\K[^ ]+")
+         command=$(echo "$command" | sed 's/]*$//') 
         sudo_user=$(echo "$message" | grep -oP "USER=\K[^ ]+")
-        SUDO_PRIVILEGES_DATA+=("$log_date $timestamp\t\t$sudo_user\t$pwd\t$command")
-    elif [[ "$message" =~ "session opened" ]]; then
-        # Session Opened - Increment count for the application
-        if [[ -n "$app_name" ]]; then
-        
-            if [[ -v SESSION_APPLICATIONS["$app_name"] ]]; then
+       sudo_user=$(echo "$sudo_user" | sed 's/]*$//') 
 
+        
+
+        SUDO_PRIVILEGES_OUTPUT+=("$timestamp $sudo_user $command")
+    elif [[ "$message" =~ "session opened" ]]; then  # Session Opened
+       
+
+        if [[ -n "$app_name" ]]; then
+            if [[ -v SESSION_APPLICATIONS["$app_name"] ]]; then
                 SESSION_APPLICATIONS["$app_name"]=$((SESSION_APPLICATIONS["$app_name"] + 1))
             else
                 SESSION_APPLICATIONS["$app_name"]=1
             fi
+            
         fi
     else 
-      OTHER_EVENTS["$app_name"]=$((OTHER_EVENTS["$app_name"] + 1))
-     
+        # Other events
+        if [[ -n "$app_name" ]]; then
+            OTHER_EVENTS["$app_name"]=$((OTHER_EVENTS["$app_name"] + 1))
+          
+        fi
     fi
 }
 
 
 display_results() {
-    # Display authentication failures
-    echo -e "\e[31mAuthentication Failures\e[0m"
-     echo "----------------------------------------------------------------------" 
-    printf "%-25s %-25s %-25s\n" "Timestamp" "Logname" "User"
-    echo "----------------------------------------------------------------------"  # Adjusted length to match the header width
-    for record in "${AUTH_FAILUER_DATE[@]}"; do
-        echo -e "$record"
-    done
-    echo
 
-    # Display sudo privileges
-    echo -e "\e[31mSudo Privileges\e[0m"
-     echo "-------------------------------------------------------------------------------------------"
-    printf "%-25s %-25s %-25s %-25s\n" "Timestamp" "Sudo User" "PWD" "Command"
-    echo "-------------------------------------------------------------------------------------------"  # Adjusted length to match header width
-    for record in "${SUDO_PRIVILEGES_DATA[@]}"; do
-        echo -e "$record"
-    done
-    echo
+echo -e "\e[31mAuthentication Failures\e[0m"
+printf "%-25s %-25s %-25s\n" "Timestamp" "User" "Logname"
+printf "%-25s %-25s %-25s\n" "---------" "----" "-------"
 
-    # Display session report
-    echo -e "\e[31mSession Report\e[0m"
-     echo "----------------------------------------------------------------------" 
-    printf "%-25s %-25s\n" "Application Name" "Number of Sessions"
-    echo "----------------------------------------------------------------------"  # Adjusted length to match the header width
+for record in "${AUTH_FAILUER_OUTPUT[@]}"; do
+   
+    read -r timestamp user logname <<< "$record"
+    printf "%-25s %-25s %-25s\n" "$timestamp" "$user" "$logname"
+done
+echo
 
-    for app in "${!SESSION_APPLICATIONS[@]}"; do
-        count=${SESSION_APPLICATIONS[$app]}
-        printf "%-25s %-25s\n" "$app" "$count"
-    done
+
+echo -e "\e[31mSudo Privileges\e[0m"
+printf "%-25s %-25s %-25s %-25s\n" "Timestamp" "Sudo User" "Command" 
+printf "%-25s %-25s %-25s %-25s\n" "---------" "---------" "-----" 
+
+
+for record in "${SUDO_PRIVILEGES_OUTPUT[@]}"; do
+    
+    read -r timestamp sudo_user command <<< "$record"
+    printf "%-25s %-25s %-25s %-25s\n" "$timestamp" "$sudo_user" "$command" 
+done
+echo
+
+=
+echo -e "\e[31mSession Report\e[0m"
+printf "%-25s %-25s\n" "Application Name" "Number of Sessions"
+printf "%-25s %-25s\n" "----------------" "-----------------"
+
+
+for app in "${!SESSION_APPLICATIONS[@]}"; do
+    count=${SESSION_APPLICATIONS[$app]}
+    printf "%-25s %-25s\n" "$app" "$count"
+done
+echo
+
 }
-
 
 generate_graph() {
     echo -e "\n\e[34mGraphical Representation:\e[0m"
 
-    # Total counts
-    total_failed_logins=0
-    for user in "${!AUTH_FAILURE_DATA[@]}"; do
-        count=${AUTH_FAILURE_DATA[$user]}
-        total_failed_logins=$((total_failed_logins + count))
-    done
-
-    total_successful_logins=0
-    for user in "${!SUDO_PRIVILEGES_DATA[@]}"; do
-        count=${SUDO_PRIVILEGES_DATA[$user]}
-        total_successful_logins=$((total_successful_logins + count))
-    done
+    total_failed_logins=${#AUTH_FAILUER_OUTPUT[@]}
+    total_successful_logins=${#SUDO_PRIVILEGES_OUTPUT[@]}
 
     total_session_opens=0
     for app in "${!SESSION_APPLICATIONS[@]}"; do
@@ -111,10 +123,8 @@ generate_graph() {
         total_other_events=$((total_other_events + count))
     done
 
-    # Calculate total of all events
     total_events=$((total_failed_logins + total_successful_logins + total_session_opens + total_other_events))
 
-    # Find the maximum value among the counts for scaling
     max_value=$total_failed_logins
     if [ "$total_successful_logins" -gt "$max_value" ]; then
         max_value=$total_successful_logins
@@ -127,16 +137,14 @@ generate_graph() {
     fi
 
     if [ "$max_value" -eq 0 ]; then
-        max_value=1  # Prevent division by zero
+        max_value=1
     fi
 
-    # Normalize counts for graph scaling
     normalized_failed_logins=$(( total_failed_logins * 50 / max_value ))
     normalized_successful_logins=$(( total_successful_logins * 50 / max_value ))
     normalized_session_opens=$(( total_session_opens * 50 / max_value ))
     normalized_other_events=$(( total_other_events * 50 / max_value ))
 
-    # Ensure at least one block for non-zero counts
     if [ "$total_failed_logins" -gt 0 ] && [ "$normalized_failed_logins" -eq 0 ]; then
         normalized_failed_logins=1
     fi
@@ -150,39 +158,33 @@ generate_graph() {
         normalized_other_events=1
     fi
 
-    # Print the graph using specified colors
-    # Total Failed Logins (Severe Errors)
-    printf "Failed Logins:  "
+    printf "\n"
+    printf "Failed Logins:       "
     for ((i=0; i<normalized_failed_logins; i++)); do
-        printf "\e[31m▅\e[0m"  # Red
+        printf "\e[31m▅\e[0m"
     done
     printf " $total_failed_logins\n"
 
-    # Total Successful Logins (Success)
     printf "Successful Logins:   "
     for ((i=0; i<normalized_successful_logins; i++)); do
-        printf "\e[32m▅\e[0m"  
+        printf "\e[32m▅\e[0m"
     done
     printf " $total_successful_logins\n"
 
-    # Total Session Openings (Warnings)
     printf "Session Openings:    "
     for ((i=0; i<normalized_session_opens; i++)); do
-        printf "\e[91m▅\e[0m" 
+        printf "\e[91m▅\e[0m"
     done
     printf " $total_session_opens\n"
 
-    # Total Other Events
     printf "Other Events:        "
     for ((i=0; i<normalized_other_events; i++)); do
-         printf "\e[38;5;214m▅\e[0m"
+        printf "\e[38;5;214m▅\e[0m"
     done
     printf " $total_other_events\n"
 
-    # Print the total events count
-    echo -e "\n\e[35mTotal Events:        $total_events\e[0m"  # Magenta
+    echo -e "\n\e[35mTotal Events:        $total_events\e[0m"
 }
-
 
 parse_log() {
     local log_file="$LOG_FILE"
@@ -216,12 +218,11 @@ parse_log() {
                 if [[ "$log_date" == "$INPUT_DATE" ]]; then
                     timestamp=$(echo "$line" | awk -F'T' '{print $2}' | cut -d '.' -f 1)
 
-                    # Check if timestamp is within the specified range
+                   
                     if [[ "$timestamp" > "$START_TIME" || "$timestamp" == "$START_TIME" ]] && [[ "$timestamp" < "$END_TIME" || "$timestamp" == "$END_TIME" ]]; then
-                       app_name=$(echo "$line" | awk '{print $3}' | cut -d'[' -f1 | sed 's/:$//')  # Extract app name without PID
-                        message=$(echo "$line" | awk -F ']: ' '{gsub(/^ +| +$/, "", $2); print $2}')  # Extract message and trim spaces
-                        #echo "Extracted message: '$message'"  # Debugging statement
-                    
+                       app_name=$(echo "$line" | awk '{print $3}' | cut -d'[' -f1 | sed 's/:$//')  
+                       message=$(echo "$line")
+                 
                        
                     fi
                 fi
@@ -233,20 +234,19 @@ parse_log() {
 
                 if [[ "$log_date" == "$date_mmm_dd" ]]; then
                     app_name=$(echo "$line" | awk '{print $5}' | cut -d '[' -f 1)
-                    message=$(echo "$line" | cut -d ':' -f 3- | sed -e "s/^ *//" -e "s/ *$//")  # Trim whitespaces
-
+                    message=$(echo "$line" | cut -d ':' -f 3- | sed -e "s/^ *//" -e "s/ *$//")  
                     # Clean up app name
-                    app_name="${app_name%:}"        # Remove trailing colon if exists
+                    app_name="${app_name%:}"      
                     app_name="${app_name%[]}"
-                    app_name="${app_name%]}"       # Remove trailing bracket if exists
-                   # echo "Extracted message: '$message'"  # Debugging statement
+                    app_name="${app_name%]}"       
+                  
                 fi
             fi
         fi
 
-        # Check if message is not empty
+      
         if [[ -n "$message" ]]; then
-            # Categorize the message
+          
             local category
           
             categorize_message "$message" "$log_date" "$timestamp" "$app_name"
@@ -263,7 +263,7 @@ parse_log() {
 main() {
     if [[ -f $LOG_FILE ]]; then
         parse_log "$LOG_FILE"
-       # print_summary
+      
 
         printf "\n"
         display_results
