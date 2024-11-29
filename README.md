@@ -18,6 +18,7 @@
    ```bash
    sudo ./test_auth.sh <date: yyyy-mm-dd> <start_time: hh:mm:ss> <end_time: hh:mm:ss>
    ```
+   - replace test_auth.sh to desired  script.
 
    
   
