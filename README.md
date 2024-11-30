@@ -28,10 +28,8 @@ Spinner Animation: Incorporates a spinner animation to indicate processing activ
 
 ## Data Export and Integration:
 
-Structured Data Output: Exports error counts to a tab-separated values (TSV) file (error_counts.dat) for potential integration with other monitoring tools or further data analysis.
+Structured Data Output: Exports error counts to a file error_counts.dat for potential integration with other monitoring tools or further data analysis.
 Modular Design: Facilitates extensibility by allowing the addition of more data types and integration with auxiliary scripts (e.g., generate_mem.sh) for extended functionality.
-
-# SSD Project Log Analysis
 
 ## How to Run
 
