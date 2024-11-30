@@ -20,4 +20,4 @@ https://github.com/user-attachments/assets/ed7f74a3-f6cc-43ee-94dc-d33623ab2287
    ```bash
    sudo ./test_auth.sh <date: yyyy-mm-dd> <start_time: hh:mm:ss> <end_time: hh:mm:ss>
    ```
-   - replace test_auth.sh to desired  script.
+   - **Custom Debug Scripts :** Replace test_auth.sh to desired  script.
